@@ -1,7 +1,8 @@
 # BankMind — Track A (Data Analyst)
 
 **Author:** Abhinav Atul  
-**Track:** A — Data Analyst
+**Track:** A — Data Analyst  
+**Live Demo:** 🚀 [https://bankmind-abhinavatul.streamlit.app/](https://bankmind-abhinavatul.streamlit.app/)
 
 ## Quick Start
 
