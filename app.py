@@ -590,8 +590,10 @@ tabs = st.tabs([
     "Loan drag",
     "Top segments",
     "Find leads",
+    "Contact fatigue",
+    "ROI Simulator"
 ])
-tab_snap, tab_who, tab_money, tab_loans, tab_segs, tab_leads = tabs
+tab_snap, tab_who, tab_money, tab_loans, tab_segs, tab_leads, tab_fatigue, tab_roi = tabs
 
 
 # ════════════════════════════════════════════════════════════════
@@ -1417,3 +1419,122 @@ with tab_leads:
         No call history required. High-score customers are worth calling first.
     </div>
     """, unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════════════════════
+# TAB 7 — CONTACT FATIGUE
+# ════════════════════════════════════════════════════════════════
+with tab_fatigue:
+    st.markdown(f"""
+    <div class="page-header">
+        <div>
+            <div class="page-title">When to stop calling</div>
+            <div class="page-desc">Diminishing returns on contact frequency</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Group by number of contacts (campaign)
+    df_campaign = df[df["campaign"] <= 10]
+    fatigue_stats = df_campaign.groupby("campaign")["subscribed"].agg(['count', 'mean']).reset_index()
+    fatigue_stats["mean"] = fatigue_stats["mean"] * 100
+
+    fig_fatigue = go.Figure()
+    fig_fatigue.add_trace(go.Bar(
+        x=fatigue_stats["campaign"],
+        y=fatigue_stats["count"],
+        name="Total Calls Made",
+        marker_color=C["muted"],
+        opacity=0.3,
+        yaxis="y2",
+        hovertemplate="Campaign Call #%{x}<br>Total Customers: %{y:,}<extra></extra>"
+    ))
+    fig_fatigue.add_trace(go.Scatter(
+        x=fatigue_stats["campaign"],
+        y=fatigue_stats["mean"],
+        name="Conversion Rate (%)",
+        mode="lines+markers",
+        marker=dict(size=10, color=C["accent"], line=dict(width=2, color=C["bg"])),
+        line=dict(width=4),
+        hovertemplate="Campaign Call #%{x}<br>Conversion Rate: %{y:.1f}%<extra></extra>"
+    ))
+
+    fig_fatigue.update_layout(
+        **base_layout(height=400, xaxis_title="Number of calls made (this campaign)", yaxis_title="Conversion Rate (%)"),
+        yaxis2=dict(
+            title="Volume of Calls",
+            overlaying="y",
+            side="right",
+            showgrid=False,
+            color=C["muted"]
+        )
+    )
+    # Set x-axis tickvals
+    fig_fatigue.update_xaxes(tickvals=list(range(1, 11)))
+    st.plotly_chart(fig_fatigue, width='stretch')
+    
+    st.markdown(f"""
+    <div class="callout">
+        <b>Insight:</b> The conversion rate drops drastically after the 2nd or 3rd call. 
+        Continuing to call customers 5, 6, or 7 times yields a near-zero return on investment while 
+        burning RM time and creating customer frustration.
+    </div>
+    """, unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════════════════════
+# TAB 8 — ROI SIMULATOR
+# ════════════════════════════════════════════════════════════════
+with tab_roi:
+    st.markdown(f"""
+    <div class="page-header">
+        <div>
+            <div class="page-title">Campaign ROI Simulator</div>
+            <div class="page-desc">Plan your calling budget based on current sidebar filters</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f"<div style='color:{C['text']}; font-size:0.95rem; margin-bottom:1rem;'>Currently simulating for the segment selected in the sidebar (<b style='color:{C['accent']};'>{len(df):,}</b> customers).</div>", unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        budget = st.slider("Total Campaign Budget (€)", min_value=1000, max_value=50000, value=10000, step=1000)
+    with col2:
+        cost_per_call = st.slider("Cost per Call / RM Time (€)", min_value=1, max_value=20, value=5, step=1)
+    
+    max_calls_affordable = budget // cost_per_call
+    actual_calls = min(max_calls_affordable, len(df))
+    projected_subs = int(actual_calls * (seg_rate / 100))
+    total_spent = actual_calls * cost_per_call
+    cpa = total_spent / projected_subs if projected_subs > 0 else 0
+    
+    # Global comparison
+    global_cpa = cost_per_call / (GLOBAL_RATE / 100) if GLOBAL_RATE > 0 else 0
+    
+    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+    
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.markdown(f"""<div class='metric-card'><div class='metric-label'>Calls Affordable</div><div class='metric-value'>{actual_calls:,}</div></div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"""<div class='metric-card'><div class='metric-label'>Total Spent</div><div class='metric-value'>€{total_spent:,}</div></div>""", unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"""<div class='metric-card' style='border-color:{C['accent']};'><div class='metric-label' style='color:{C['accent']};'>Projected Conversions</div><div class='metric-value'>{projected_subs:,}</div></div>""", unsafe_allow_html=True)
+    with c4:
+        cpa_color = C["accent"] if cpa < global_cpa else C["danger"]
+        st.markdown(f"""<div class='metric-card'><div class='metric-label'>Cost Per Acquisition</div><div class='metric-value' style='color:{cpa_color};'>€{cpa:,.0f}</div></div>""", unsafe_allow_html=True)
+        
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Visual gauge for CPA vs Global CPA
+    fig_cpa = go.Figure()
+    fig_cpa.add_trace(go.Bar(
+        y=['Global Baseline CPA', 'Current Segment CPA'],
+        x=[global_cpa, cpa],
+        orientation='h',
+        marker_color=[C["muted"], cpa_color],
+        text=[f"€{global_cpa:,.0f}/sub", f"€{cpa:,.0f}/sub"],
+        textposition='auto',
+        hovertemplate="%{y}<br>CPA: €%{x:,.0f}<extra></extra>"
+    ))
+    fig_cpa.update_layout(**base_layout(height=200, xaxis_title="Cost Per Acquisition (CPA) in €", yaxis_title=""))
+    st.plotly_chart(fig_cpa, width='stretch')
